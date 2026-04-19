@@ -1,12 +1,20 @@
 package blockfs
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
+
+const (
+	cacheStateUninitialized int32 = iota
+	cacheStateOpen
+	cacheStateClosed
+)
 
 type cachedFile struct {
-	stateMu sync.Mutex
 	cacheMu sync.RWMutex
 	file    File
-	closed  bool
+	state   atomic.Int32
 	blocks  map[int64][]byte
 	dirty   []int64
 }
@@ -19,6 +27,7 @@ func Cache(file File) File {
 		file:   file,
 		blocks: make(map[int64][]byte),
 	}
+	f.state.Store(cacheStateOpen)
 
 	return f
 }
@@ -34,12 +43,12 @@ func OpenCached(path string, opts Options) (File, error) {
 	return Cache(file), nil
 }
 
-func (f *cachedFile) BlockSize() int64 {
-	return f.file.BlockSize()
+func (f *cachedFile) Size() int64 {
+	return f.file.Size()
 }
 
-func (f *cachedFile) ReadBlock(index int64) ([]byte, error) {
-	if _, err := blockOffset(index, f.file.BlockSize()); err != nil {
+func (f *cachedFile) Read(index int64) ([]byte, error) {
+	if _, err := blockOffset(index, f.file.Size()); err != nil {
 		return nil, err
 	}
 	if err := f.ensureOpen(); err != nil {
@@ -53,7 +62,7 @@ func (f *cachedFile) ReadBlock(index int64) ([]byte, error) {
 	}
 	f.cacheMu.RUnlock()
 
-	block, err := f.file.ReadBlock(index)
+	block, err := f.file.Read(index)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +79,8 @@ func (f *cachedFile) ReadBlock(index int64) ([]byte, error) {
 	return cloneBlock(block), nil
 }
 
-func (f *cachedFile) WriteBlock(index int64, data []byte) error {
-	blockSize := f.file.BlockSize()
+func (f *cachedFile) Write(index int64, data []byte) error {
+	blockSize := f.file.Size()
 	if _, err := blockOffset(index, blockSize); err != nil {
 		return err
 	}
@@ -101,7 +110,7 @@ func (f *cachedFile) Sync() error {
 		if !ok {
 			continue
 		}
-		if err := f.file.WriteBlock(index, block); err != nil {
+		if err := f.file.Write(index, block); err != nil {
 			return err
 		}
 	}
@@ -113,13 +122,9 @@ func (f *cachedFile) Sync() error {
 }
 
 func (f *cachedFile) Close() error {
-	f.stateMu.Lock()
-	defer f.stateMu.Unlock()
-
-	if f.closed {
+	if !f.state.CompareAndSwap(cacheStateOpen, cacheStateClosed) {
 		return ErrClosed
 	}
-	f.closed = true
 
 	return f.file.Close()
 }
@@ -154,10 +159,7 @@ func cloneBlock(data []byte) []byte {
 }
 
 func (f *cachedFile) ensureOpen() error {
-	f.stateMu.Lock()
-	defer f.stateMu.Unlock()
-
-	if f.closed {
+	if f.state.Load() != cacheStateOpen {
 		return ErrClosed
 	}
 
