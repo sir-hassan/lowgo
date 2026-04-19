@@ -39,11 +39,11 @@ func Open(path string, opts Options) (File, error) {
 	return bf, nil
 }
 
-func (f *blockFile) BlockSize() int64 {
+func (f *blockFile) Size() int64 {
 	return f.blockSize
 }
 
-func (f *blockFile) ReadBlock(index int64) ([]byte, error) {
+func (f *blockFile) Read(index int64) ([]byte, error) {
 	buf := make([]byte, f.blockSize)
 	if err := f.readBlockInto(index, buf); err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (f *blockFile) readBlockInto(index int64, dst []byte) error {
 	return err
 }
 
-func (f *blockFile) WriteBlock(index int64, data []byte) error {
+func (f *blockFile) Write(index int64, data []byte) error {
 	offset, err := blockOffset(index, f.blockSize)
 	if err != nil {
 		return err

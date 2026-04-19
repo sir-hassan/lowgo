@@ -14,9 +14,9 @@ var (
 )
 
 type File interface {
-	BlockSize() int64
-	ReadBlock(index int64) ([]byte, error)
-	WriteBlock(index int64, data []byte) error
+	Size() int64
+	Read(index int64) ([]byte, error)
+	Write(index int64, data []byte) error
 	Sync() error
 	Close() error
 }

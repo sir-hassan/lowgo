@@ -39,19 +39,19 @@ func TestReadWriteBlockRoundTrip(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	block := make([]byte, bf.BlockSize())
+	block := make([]byte, bf.Size())
 	for i := range block {
 		block[i] = byte(i % 251)
 	}
 
-	if err := bf.WriteBlock(2, block); err != nil {
+	if err := bf.Write(2, block); err != nil {
 		t.Fatalf("write block: %v", err)
 	}
 	if err := bf.Sync(); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 
-	got, err := bf.ReadBlock(2)
+	got, err := bf.Read(2)
 	if err != nil {
 		t.Fatalf("read block: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestReadSparseBlockReturnsZeroFilledData(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	got, err := bf.ReadBlock(8)
+	got, err := bf.Read(8)
 	if err != nil {
 		t.Fatalf("read sparse block: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestWriteRejectsWrongSizedBuffer(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	err = bf.WriteBlock(0, make([]byte, 1024))
+	err = bf.Write(0, make([]byte, 1024))
 	if !errors.Is(err, blockfs.ErrShortBlock) {
 		t.Fatalf("expected ErrShortBlock, got %v", err)
 	}
@@ -123,7 +123,7 @@ func TestReadBlockZeroFillsRemainderOfPartialBlock(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	got, err := bf.ReadBlock(0)
+	got, err := bf.Read(0)
 	if err != nil {
 		t.Fatalf("read block: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestReadRejectsInvalidBlockIndex(t *testing.T) {
 	})
 
 	for _, index := range []int64{-1, math.MaxInt64/4096 + 1} {
-		if _, err := bf.ReadBlock(index); !errors.Is(err, blockfs.ErrInvalidBlock) {
+		if _, err := bf.Read(index); !errors.Is(err, blockfs.ErrInvalidBlock) {
 			t.Fatalf("expected ErrInvalidBlock for index %d, got %v", index, err)
 		}
 	}
@@ -169,9 +169,9 @@ func TestWriteRejectsInvalidBlockIndex(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	block := make([]byte, bf.BlockSize())
+	block := make([]byte, bf.Size())
 	for _, index := range []int64{-1, math.MaxInt64/4096 + 1} {
-		if err := bf.WriteBlock(index, block); !errors.Is(err, blockfs.ErrInvalidBlock) {
+		if err := bf.Write(index, block); !errors.Is(err, blockfs.ErrInvalidBlock) {
 			t.Fatalf("expected ErrInvalidBlock for index %d, got %v", index, err)
 		}
 	}
@@ -194,7 +194,7 @@ func TestCloseMakesFurtherOperationsFail(t *testing.T) {
 	if err := bf.Close(); !errors.Is(err, blockfs.ErrClosed) {
 		t.Fatalf("expected ErrClosed on second close, got %v", err)
 	}
-	if _, err := bf.ReadBlock(0); !errors.Is(err, blockfs.ErrClosed) {
+	if _, err := bf.Read(0); !errors.Is(err, blockfs.ErrClosed) {
 		t.Fatalf("expected ErrClosed on read after close, got %v", err)
 	}
 	if err := bf.Sync(); !errors.Is(err, blockfs.ErrClosed) {
@@ -215,10 +215,10 @@ func TestSyncPersistsDataAcrossReopen(t *testing.T) {
 		t.Fatalf("open writer: %v", err)
 	}
 
-	payload := make([]byte, writer.BlockSize())
+	payload := make([]byte, writer.Size())
 	copy(payload, []byte("persistent block"))
 
-	if err := writer.WriteBlock(1, payload); err != nil {
+	if err := writer.Write(1, payload); err != nil {
 		t.Fatalf("write block: %v", err)
 	}
 	if err := writer.Sync(); err != nil {
@@ -232,8 +232,8 @@ func TestSyncPersistsDataAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Size() != 2*writer.BlockSize() {
-		t.Fatalf("expected file size %d, got %d", 2*writer.BlockSize(), info.Size())
+	if info.Size() != 2*writer.Size() {
+		t.Fatalf("expected file size %d, got %d", 2*writer.Size(), info.Size())
 	}
 
 	reader, err := blockfs.Open(path, blockfs.Options{BlockSize: 4096})
@@ -244,7 +244,7 @@ func TestSyncPersistsDataAcrossReopen(t *testing.T) {
 		_ = reader.Close()
 	})
 
-	got, err := reader.ReadBlock(1)
+	got, err := reader.Read(1)
 	if err != nil {
 		t.Fatalf("read persisted block: %v", err)
 	}
@@ -271,14 +271,14 @@ func TestWriteAndReadBackOneHundredBlocks(t *testing.T) {
 
 	wantBlocks := make([][]byte, totalBlocks)
 	for i := 0; i < totalBlocks; i++ {
-		block := make([]byte, bf.BlockSize())
+		block := make([]byte, bf.Size())
 		prefix := []byte(fmt.Sprintf("block-%03d", i))
 		copy(block, prefix)
 		for j := len(prefix); j < len(block); j++ {
 			block[j] = byte((i + j) % 251)
 		}
 
-		if err := bf.WriteBlock(int64(i), block); err != nil {
+		if err := bf.Write(int64(i), block); err != nil {
 			t.Fatalf("write block %d: %v", i, err)
 		}
 		wantBlocks[i] = block
@@ -292,12 +292,12 @@ func TestWriteAndReadBackOneHundredBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Size() != int64(totalBlocks)*bf.BlockSize() {
-		t.Fatalf("expected file size %d, got %d", int64(totalBlocks)*bf.BlockSize(), info.Size())
+	if info.Size() != int64(totalBlocks)*bf.Size() {
+		t.Fatalf("expected file size %d, got %d", int64(totalBlocks)*bf.Size(), info.Size())
 	}
 
 	for i, want := range wantBlocks {
-		got, err := bf.ReadBlock(int64(i))
+		got, err := bf.Read(int64(i))
 		if err != nil {
 			t.Fatalf("read block %d: %v", i, err)
 		}
@@ -325,9 +325,9 @@ func TestReadNonExistentBlocksAfterWritingOneHundredBlocksReturnsZeroFilledData(
 	const totalBlocks = 100
 
 	for i := 0; i < totalBlocks; i++ {
-		block := make([]byte, bf.BlockSize())
+		block := make([]byte, bf.Size())
 		block[0] = byte(i)
-		if err := bf.WriteBlock(int64(i), block); err != nil {
+		if err := bf.Write(int64(i), block); err != nil {
 			t.Fatalf("write block %d: %v", i, err)
 		}
 	}
@@ -337,7 +337,7 @@ func TestReadNonExistentBlocksAfterWritingOneHundredBlocksReturnsZeroFilledData(
 	}
 
 	for _, index := range []int64{100, 150, 999} {
-		got, err := bf.ReadBlock(index)
+		got, err := bf.Read(index)
 		if err != nil {
 			t.Fatalf("read non-existent block %d: %v", index, err)
 		}
@@ -389,8 +389,8 @@ func TestBasicWriteRead(t *testing.T) {
 	const totalBlocks = 10
 
 	for i := 0; i < totalBlocks; i++ {
-		str := strings.Repeat(strconv.Itoa(i), int(bf.BlockSize()))
-		if err := bf.WriteBlock(int64(i), []byte(str)); err != nil {
+		str := strings.Repeat(strconv.Itoa(i), int(bf.Size()))
+		if err := bf.Write(int64(i), []byte(str)); err != nil {
 			t.Fatalf("write block %d: %v", i, err)
 		}
 	}
@@ -401,7 +401,7 @@ func TestBasicWriteRead(t *testing.T) {
 
 	got := ""
 	for i := 0; i < totalBlocks; i++ {
-		st, err := bf.ReadBlock(int64(i))
+		st, err := bf.Read(int64(i))
 		if err != nil {
 			t.Fatalf("read block %d: %v", i, err)
 		}
@@ -433,7 +433,7 @@ func BenchmarkWriteTenThousandOneKilobyteBlocks(b *testing.B) {
 		}
 
 		for i, payload := range payloads {
-			if err := bf.WriteBlock(int64(i), payload); err != nil {
+			if err := bf.Write(int64(i), payload); err != nil {
 				_ = bf.Close()
 				b.Fatalf("write block %d: %v", i, err)
 			}
@@ -467,7 +467,7 @@ func BenchmarkReadTenThousandOneKilobyteBlocks(b *testing.B) {
 			b.Fatalf("open writer: %v", err)
 		}
 		for i, payload := range payloads {
-			if err := writer.WriteBlock(int64(i), payload); err != nil {
+			if err := writer.Write(int64(i), payload); err != nil {
 				_ = writer.Close()
 				b.Fatalf("seed block %d: %v", i, err)
 			}
@@ -486,7 +486,7 @@ func BenchmarkReadTenThousandOneKilobyteBlocks(b *testing.B) {
 		}
 
 		for i, want := range payloads {
-			got, err := reader.ReadBlock(int64(i))
+			got, err := reader.Read(int64(i))
 			if err != nil {
 				_ = reader.Close()
 				b.Fatalf("read block %d: %v", i, err)
