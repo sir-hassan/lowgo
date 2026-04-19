@@ -1,6 +1,20 @@
 # lowgo
 
-`pkg/blockfs` provides fixed-size block reads and writes over regular files.
+`lowgo` is a Go library collection for lower-level systems constructs.
+
+The project is meant to hold small, focused packages that expose primitives
+useful when building storage engines, filesystems, caches, and other
+infrastructure code. The emphasis is on simple APIs, explicit behavior, and
+low-level building blocks rather than full application frameworks.
+
+`pkg/blockfs` is one package inside `lowgo`. It provides fixed-size block reads
+and writes over regular files.
+
+## Packages
+
+- `pkg/blockfs`: fixed-size block file access with an optional in-memory cache
+
+## blockfs example
 
 ```go
 package main
