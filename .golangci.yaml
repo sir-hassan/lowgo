@@ -1,0 +1,81 @@
+version: "2"
+run:
+  issues-exit-code: 1
+  tests: false
+
+linters:
+  default: all
+
+  disable:
+    - canonicalheader
+    - cyclop
+    - depguard
+    - exhaustruct
+    - funlen
+    - gochecknoglobals
+    - godox
+    - ireturn
+    - lll
+    - mnd
+    - musttag
+    - prealloc
+    - tagliatelle
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - funcorder
+    - wsl_v5
+    - noinlineerr
+
+  settings:
+    nlreturn:
+      block-size: 2
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+        use-field-name: true
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - err113
+        text: 'do not define dynamic errors, use wrapped static errors instead:'
+      - linters:
+          - gocritic
+        text: 'ifElseChain: rewrite if-else to switch statement'
+      - linters:
+          - errcheck
+        text: Rollback` is not checked
+      - linters:
+          - errchkjson
+        text: encoding/json.Encoder
+      - linters:
+          - errchkjson
+        text: encoding/json.Marshal
+      - linters:
+          - staticcheck
+        text: 'SA1029: should not use built-in type string as key for value'
+      - linters:
+          - revive
+        text: 'unused-parameter:'
+      - linters:
+          - revive
+        text: 'empty-block:'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+
