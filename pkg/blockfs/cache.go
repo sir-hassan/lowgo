@@ -1,12 +1,20 @@
 package blockfs
 
-import "sync"
+import (
+	"sync"
+	"sync/atomic"
+)
+
+const (
+	cacheStateUninitialized int32 = iota
+	cacheStateOpen
+	cacheStateClosed
+)
 
 type cachedFile struct {
-	stateMu sync.Mutex
 	cacheMu sync.RWMutex
 	file    File
-	closed  bool
+	state   atomic.Int32
 	blocks  map[int64][]byte
 	dirty   []int64
 }
@@ -19,6 +27,7 @@ func Cache(file File) File {
 		file:   file,
 		blocks: make(map[int64][]byte),
 	}
+	f.state.Store(cacheStateOpen)
 
 	return f
 }
@@ -113,13 +122,9 @@ func (f *cachedFile) Sync() error {
 }
 
 func (f *cachedFile) Close() error {
-	f.stateMu.Lock()
-	defer f.stateMu.Unlock()
-
-	if f.closed {
+	if !f.state.CompareAndSwap(cacheStateOpen, cacheStateClosed) {
 		return ErrClosed
 	}
-	f.closed = true
 
 	return f.file.Close()
 }
@@ -154,10 +159,7 @@ func cloneBlock(data []byte) []byte {
 }
 
 func (f *cachedFile) ensureOpen() error {
-	f.stateMu.Lock()
-	defer f.stateMu.Unlock()
-
-	if f.closed {
+	if f.state.Load() != cacheStateOpen {
 		return ErrClosed
 	}
 
