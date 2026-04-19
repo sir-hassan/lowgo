@@ -4,14 +4,19 @@ import (
 	"errors"
 	"io"
 	"os"
-	"sync"
+	"sync/atomic"
+)
+
+const (
+	fileStateUninitialized int32 = iota
+	fileStateOpen
+	fileStateClosed
 )
 
 type blockFile struct {
-	mu        sync.RWMutex
 	file      *os.File
 	blockSize int64
-	closed    bool
+	state     atomic.Int32
 }
 
 func Open(path string, opts Options) (File, error) {
@@ -25,10 +30,13 @@ func Open(path string, opts Options) (File, error) {
 		return nil, err
 	}
 
-	return &blockFile{
+	bf := &blockFile{
 		file:      f,
 		blockSize: opts.BlockSize,
-	}, nil
+	}
+	bf.state.Store(fileStateOpen)
+
+	return bf, nil
 }
 
 func (f *blockFile) BlockSize() int64 {
@@ -106,23 +114,15 @@ func (f *blockFile) Sync() error {
 }
 
 func (f *blockFile) Close() error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	if f.closed {
+	if !f.state.CompareAndSwap(fileStateOpen, fileStateClosed) {
 		return ErrClosed
 	}
-
-	f.closed = true
 
 	return f.file.Close()
 }
 
 func (f *blockFile) readFile() (*os.File, error) {
-	f.mu.RLock()
-	defer f.mu.RUnlock()
-
-	if f.closed {
+	if f.state.Load() != fileStateOpen {
 		return nil, ErrClosed
 	}
 
