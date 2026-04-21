@@ -1,20 +1,29 @@
 # lowgo
 
-`lowgo` is a Go library collection for lower-level systems constructs.
+`lowgo` is a small collection of Go packages for low-level storage and message
+routing primitives.
 
-The project is meant to hold small, focused packages that expose primitives
-useful when building storage engines, filesystems, caches, and other
-infrastructure code. The emphasis is on simple APIs, explicit behavior, and
-low-level building blocks rather than full application frameworks.
-
-`pkg/blockfs` is one package inside `lowgo`. It provides fixed-size block reads
-and writes over regular files.
+The repo is intentionally package-oriented. Each package is meant to be usable
+on its own, with explicit APIs and minimal framework code.
 
 ## Packages
 
-- `pkg/blockfs`: fixed-size block file access with an optional in-memory cache
+### `pkg/blockfs`
 
-## blockfs example
+Fixed-size block I/O over regular files.
+
+What it provides:
+- Open a file as a block-addressable store.
+- Read and write blocks by index.
+- Sync writes to disk.
+- Optionally wrap the file with an in-memory cache.
+
+Main APIs:
+- `blockfs.Open(path, opts)`
+- `blockfs.OpenCached(path, opts)`
+- `blockfs.Cache(file)`
+
+Example:
 
 ```go
 package main
@@ -26,23 +35,23 @@ import (
 )
 
 func main() {
-	bf, err := blockfs.Open("data.bin", blockfs.Options{BlockSize: 4 * 1024})
+	f, err := blockfs.Open("data.bin", blockfs.Options{BlockSize: 4 * 1024})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer bf.Close()
+	defer f.Close()
 
-	block := make([]byte, bf.BlockSize())
+	block := make([]byte, f.Size())
 	copy(block, []byte("hello"))
 
-	if err := bf.WriteBlock(0, block); err != nil {
+	if err := f.Write(0, block); err != nil {
 		log.Fatal(err)
 	}
-	if err := bf.Sync(); err != nil {
+	if err := f.Sync(); err != nil {
 		log.Fatal(err)
 	}
 
-	got, err := bf.ReadBlock(0)
+	got, err := f.Read(0)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,13 +60,51 @@ func main() {
 }
 ```
 
-For repeated reads of the same blocks, wrap the file-backed implementation with
-the in-memory cache:
+### `pkg/barid`
+
+An in-memory frame router built around source and drain pipes.
+
+What it provides:
+- Register a set of source pipes and drain pipes.
+- Route frames by `Frame.Code`.
+- Drop frames whose code has no matching drain.
+- Run synchronously with `Run()` or asynchronously with `Start()` and `Wait()`.
+
+Main APIs:
+- `barid.New(sources, drains, frameBufferSize)`
+- `(*barid.Router).Run()`
+- `(*barid.Router).Start()`
+- `(*barid.Router).Wait()`
+
+Example:
 
 ```go
-bf, err := blockfs.OpenCached("data.bin", blockfs.Options{BlockSize: 4 * 1024})
-if err != nil {
-	log.Fatal(err)
+package main
+
+import "github.com/sir-hassan/lowgo/pkg/barid"
+
+func main() {
+	source := make(chan barid.Frame, 1)
+	drain := make(chan barid.Frame, 1)
+
+	router, err := barid.New(
+		[]barid.Pipe{{Code: 0xAA, Channel: source}},
+		[]barid.Pipe{{Code: 0xAA, Channel: drain}},
+		0,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	router.Start()
+	source <- barid.Frame{Code: 0xAA, Bytes: []byte("hello")}
+	close(source)
+	router.Wait()
 }
-defer bf.Close()
 ```
+
+## Repository Notes
+
+- The module path is `github.com/sir-hassan/lowgo`.
+- Packages live under `pkg/`.
+- There is no top-level application in this repo; it is a package library.
