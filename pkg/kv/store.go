@@ -13,6 +13,7 @@ var (
 	ErrBucketCountMismatch = errors.New("kv: bucket count does not match file metadata")
 	ErrBlockSizeTooSmall   = errors.New("kv: block size too small for store")
 	ErrInvalidBlockSize    = errors.New("kv: invalid block size")
+	ErrInvalidType         = errors.New("kv: invalid database type")
 )
 
 type Store interface {
@@ -24,14 +25,31 @@ type Store interface {
 	Close() error
 }
 
+type Type string
+
+const (
+	TypeLinkedList Type = "linkedlist"
+)
+
 type Options struct {
 	BlockSize   int64
 	Perm        fs.FileMode
 	BucketCount int64
+	Type        Type
 }
 
 func Open(path string, opts Options) (Store, error) {
-	return OpenLinkedList(path, opts)
+	opts, err := opts.normalized()
+	if err != nil {
+		return nil, err
+	}
+
+	switch opts.Type {
+	case TypeLinkedList:
+		return OpenLinkedList(path, opts)
+	default:
+		return nil, ErrInvalidType
+	}
 }
 
 func (o Options) normalized() (Options, error) {
@@ -46,6 +64,12 @@ func (o Options) normalized() (Options, error) {
 	}
 	if o.BucketCount < 0 {
 		return Options{}, ErrInvalidBucketCount
+	}
+	if o.Type == "" {
+		o.Type = TypeLinkedList
+	}
+	if o.Type != TypeLinkedList {
+		return Options{}, ErrInvalidType
 	}
 
 	return o, nil

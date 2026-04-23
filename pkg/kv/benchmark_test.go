@@ -23,6 +23,7 @@ func BenchmarkStore(b *testing.B) {
 				store, err := kv.Open(path, kv.Options{
 					BlockSize:   1024,
 					BucketCount: 256,
+					Type:        kv.TypeLinkedList,
 				})
 				if err != nil {
 					b.Fatalf("open kv: %v", err)
@@ -53,6 +54,7 @@ func BenchmarkStore(b *testing.B) {
 			writer, err := kv.Open(path, kv.Options{
 				BlockSize:   1024,
 				BucketCount: 256,
+				Type:        kv.TypeLinkedList,
 			})
 			if err != nil {
 				b.Fatalf("open kv writer: %v", err)
@@ -71,7 +73,10 @@ func BenchmarkStore(b *testing.B) {
 				b.Fatalf("close kv writer: %v", err)
 			}
 
-			reader, err := kv.Open(path, kv.Options{BlockSize: 1024})
+			reader, err := kv.Open(path, kv.Options{
+				BlockSize: 1024,
+				Type:      kv.TypeLinkedList,
+			})
 			if err != nil {
 				b.Fatalf("open kv reader: %v", err)
 			}

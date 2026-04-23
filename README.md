@@ -113,7 +113,7 @@ Persistent key/value storage built on top of `pkg/blockfs`.
 
 What it provides:
 - A package-level `Store` interface for persistent KV backends.
-- `Open(path, opts)` as the default constructor.
+- `Open(path, opts)` as a type-dispatching constructor.
 - `OpenLinkedList(path, opts)` as the linked-list-backed implementation.
 - Variable-length values encoded across chained payload blocks.
 
@@ -137,6 +137,7 @@ func main() {
 	store, err := kv.Open("data.kv", kv.Options{
 		BlockSize:   4 * 1024,
 		BucketCount: 256,
+		Type:        kv.TypeLinkedList,
 	})
 	if err != nil {
 		log.Fatal(err)

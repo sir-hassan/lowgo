@@ -17,6 +17,7 @@ func TestRoundTripVariableValueAcrossBlocks(t *testing.T) {
 	store, err := kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 8,
+		Type:        kv.TypeLinkedList,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -37,7 +38,10 @@ func TestRoundTripVariableValueAcrossBlocks(t *testing.T) {
 		t.Fatalf("close writer: %v", err)
 	}
 
-	reader, err := kv.Open(path, kv.Options{BlockSize: 128})
+	reader, err := kv.Open(path, kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeLinkedList,
+	})
 	if err != nil {
 		t.Fatalf("reopen kv: %v", err)
 	}
@@ -114,6 +118,7 @@ func TestHasAndDeleteMissingKey(t *testing.T) {
 	store, err := kv.Open(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
+		Type:        kv.TypeLinkedList,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -141,6 +146,7 @@ func TestRejectsEmptyKey(t *testing.T) {
 	store, err := kv.Open(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
+		Type:        kv.TypeLinkedList,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -167,6 +173,7 @@ func TestRejectsBucketCountMismatch(t *testing.T) {
 	store, err := kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
+		Type:        kv.TypeLinkedList,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -178,6 +185,7 @@ func TestRejectsBucketCountMismatch(t *testing.T) {
 	_, err = kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 8,
+		Type:        kv.TypeLinkedList,
 	})
 	if !errors.Is(err, kv.ErrBucketCountMismatch) {
 		t.Fatalf("expected ErrBucketCountMismatch, got %v", err)
@@ -202,8 +210,23 @@ func TestRejectsCorruptSuperblock(t *testing.T) {
 		t.Fatalf("close raw block file: %v", err)
 	}
 
-	_, err = kv.Open(path, kv.Options{BlockSize: 128})
+	_, err = kv.Open(path, kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeLinkedList,
+	})
 	if !errors.Is(err, kv.ErrCorrupt) {
 		t.Fatalf("expected ErrCorrupt, got %v", err)
+	}
+}
+
+func TestRejectsInvalidType(t *testing.T) {
+	t.Parallel()
+
+	_, err := kv.Open(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
+		BlockSize: 128,
+		Type:      kv.Type("unknown"),
+	})
+	if !errors.Is(err, kv.ErrInvalidType) {
+		t.Fatalf("expected ErrInvalidType, got %v", err)
 	}
 }
