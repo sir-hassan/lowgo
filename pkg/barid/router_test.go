@@ -378,6 +378,7 @@ func Test_RouterRun_SimpleCases(t *testing.T) {
 		})
 	}
 }
+
 func Benchmark_RouterRun_SimpleCases(b *testing.B) {
 	tests := []struct {
 		name        string
@@ -418,12 +419,13 @@ func Benchmark_RouterRun_SimpleCases(b *testing.B) {
 		})
 	}
 }
+
 func Test_RouterRun_Allocations(t *testing.T) {
 	const (
 		sourceCount = 2
 		drainCount  = 2
 		frameCount  = 20000
-		wantAllocs  = 30
+		wantAllocs  = 31
 	)
 
 	sharedCodeCount := sourceCount

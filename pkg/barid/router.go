@@ -100,11 +100,9 @@ func (r *Router) Run() {
 
 func (r *Router) Start() {
 	r.startOnce.Do(func() {
-		r.runWG.Add(1)
-		go func() {
-			defer r.runWG.Done()
+		r.runWG.Go(func() {
 			r.Run()
-		}()
+		})
 	})
 }
 

@@ -62,6 +62,7 @@ func (f *cachedFile) Read(index int64, dst []byte) error {
 	if block, ok := f.blocks[index]; ok {
 		f.cacheMu.RUnlock()
 		copy(dst, block)
+
 		return nil
 	}
 	f.cacheMu.RUnlock()
@@ -75,12 +76,14 @@ func (f *cachedFile) Read(index int64, dst []byte) error {
 	if cached, ok := f.blocks[index]; ok {
 		f.cacheMu.Unlock()
 		copy(dst, cached)
+
 		return nil
 	}
 	f.blocks[index] = block
 	f.cacheMu.Unlock()
 
 	copy(dst, block)
+
 	return nil
 }
 
