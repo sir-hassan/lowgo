@@ -23,12 +23,9 @@ What it provides:
 - Open a file as a block-addressable store.
 - Read and write blocks by index.
 - Sync writes to disk.
-- Optionally wrap the file with an in-memory cache.
 
 Main APIs:
 - `blockfs.Open(path, opts)`
-- `blockfs.OpenCached(path, opts)`
-- `blockfs.Cache(file)`
 
 Example:
 
@@ -107,6 +104,55 @@ func main() {
 	source <- barid.Frame{Code: 0xAA, Bytes: []byte("hello")}
 	close(source)
 	router.Wait()
+}
+```
+
+### `pkg/kv`
+
+Persistent key/value storage built on top of `pkg/blockfs`.
+
+What it provides:
+- A package-level `Store` interface for persistent KV backends.
+- `Open(path, opts)` as the default constructor.
+- `OpenLinkedList(path, opts)` as the linked-list-backed implementation.
+- Variable-length values encoded across chained payload blocks.
+
+Main APIs:
+- `kv.Open(path, opts)`
+- `kv.OpenLinkedList(path, opts)`
+- `kv.Store`
+
+Example:
+
+```go
+package main
+
+import (
+	"log"
+
+	"github.com/sir-hassan/lowgo/pkg/kv"
+)
+
+func main() {
+	store, err := kv.Open("data.kv", kv.Options{
+		BlockSize:   4 * 1024,
+		BucketCount: 256,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer store.Close()
+
+	if err := store.Set([]byte("name"), []byte("lowgo")); err != nil {
+		log.Fatal(err)
+	}
+
+	value, err := store.Get([]byte("name"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_ = value
 }
 ```
 
