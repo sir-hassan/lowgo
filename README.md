@@ -1,5 +1,7 @@
 # lowgo
 
+![lowgo logo](assets/lowgo-logo.svg)
+
 `lowgo` is a small collection of Go packages for low-level storage and message
 routing primitives.
 
@@ -107,4 +109,5 @@ func main() {
 
 - The module path is `github.com/sir-hassan/lowgo`.
 - Packages live under `pkg/`.
+- The repo logo lives at `assets/lowgo-logo.svg`.
 - There is no top-level application in this repo; it is a package library.
