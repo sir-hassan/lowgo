@@ -17,7 +17,7 @@ var (
 
 type File interface {
 	Size() int64
-	Read(index int64) ([]byte, error)
+	Read(index int64, dst []byte) error
 	Write(index int64, data []byte) error
 	Sync() error
 	Close() error

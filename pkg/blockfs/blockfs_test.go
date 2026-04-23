@@ -82,8 +82,8 @@ func TestReadWriteBlockRoundTrip(t *testing.T) {
 		t.Fatalf("sync: %v", err)
 	}
 
-	got, err := bf.Read(2)
-	if err != nil {
+	got := make([]byte, bf.Size())
+	if err := bf.Read(2, got); err != nil {
 		t.Fatalf("read block: %v", err)
 	}
 	if string(got) != string(block) {
@@ -105,8 +105,8 @@ func TestReadSparseBlockReturnsZeroFilledData(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	got, err := bf.Read(8)
-	if err != nil {
+	got := make([]byte, bf.Size())
+	if err := bf.Read(8, got); err != nil {
 		t.Fatalf("read sparse block: %v", err)
 	}
 	for i, b := range got {
@@ -160,8 +160,8 @@ func TestReadBlockZeroFillsRemainderOfPartialBlock(t *testing.T) {
 		_ = bf.Close()
 	})
 
-	got, err := bf.Read(0)
-	if err != nil {
+	got := make([]byte, bf.Size())
+	if err := bf.Read(0, got); err != nil {
 		t.Fatalf("read block: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func TestReadRejectsInvalidBlockIndex(t *testing.T) {
 	})
 
 	for _, index := range []int64{-1, math.MaxInt64/4096 + 1} {
-		if _, err := bf.Read(index); !errors.Is(err, blockfs.ErrInvalidBlockIndex) {
+		if err := bf.Read(index, make([]byte, bf.Size())); !errors.Is(err, blockfs.ErrInvalidBlockIndex) {
 			t.Fatalf("expected ErrInvalidBlockIndex for index %d, got %v", index, err)
 		}
 	}
@@ -231,7 +231,7 @@ func TestCloseMakesFurtherOperationsFail(t *testing.T) {
 	if err := bf.Close(); !errors.Is(err, blockfs.ErrClosed) {
 		t.Fatalf("expected ErrClosed on second close, got %v", err)
 	}
-	if _, err := bf.Read(0); !errors.Is(err, blockfs.ErrClosed) {
+	if err := bf.Read(0, make([]byte, bf.Size())); !errors.Is(err, blockfs.ErrClosed) {
 		t.Fatalf("expected ErrClosed on read after close, got %v", err)
 	}
 	if err := bf.Sync(); !errors.Is(err, blockfs.ErrClosed) {
@@ -281,8 +281,8 @@ func TestSyncPersistsDataAcrossReopen(t *testing.T) {
 		_ = reader.Close()
 	})
 
-	got, err := reader.Read(1)
-	if err != nil {
+	got := make([]byte, reader.Size())
+	if err := reader.Read(1, got); err != nil {
 		t.Fatalf("read persisted block: %v", err)
 	}
 	if string(got) != string(payload) {
@@ -334,13 +334,54 @@ func TestWriteAndReadBackOneHundredBlocks(t *testing.T) {
 	}
 
 	for i, want := range wantBlocks {
-		got, err := bf.Read(int64(i))
-		if err != nil {
+		got := make([]byte, bf.Size())
+		if err := bf.Read(int64(i), got); err != nil {
 			t.Fatalf("read block %d: %v", i, err)
 		}
 		if !bytes.Equal(got, want) {
 			t.Fatalf("block %d contents mismatch", i)
 		}
+	}
+}
+
+// TestWriteAndRead verifies repeated round-trip
+// behavior by writing and reading 10 blocks across 100 iterations.
+func TestWriteAndRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.bin")
+	bf, err := blockfs.Open(path, blockfs.Options{BlockSize: 256})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = bf.Close()
+	})
+
+	const (
+		totalBlocks = 10
+		iterations  = 100
+	)
+
+	block := make([]byte, bf.Size())
+	readBuf := make([]byte, bf.Size())
+	allocs := testing.AllocsPerRun(5, func() {
+		for iter := 0; iter < iterations; iter++ {
+			for i := 0; i < totalBlocks; i++ {
+				block[0] = byte(iter)
+				block[1] = byte(i)
+				if err := bf.Write(int64(i), block); err != nil {
+					t.Fatalf("iteration %d write block %d: %v", iter, i, err)
+				}
+				if err := bf.Read(int64(i), readBuf); err != nil {
+					t.Fatalf("iteration %d read block %d: %v", iter, i, err)
+				}
+				if readBuf[0] != block[0] || readBuf[1] != block[1] {
+					t.Fatalf("iteration %d read block %d: expected [%d %d], got [%d %d]", iter, i, block[0], block[1], readBuf[0], readBuf[1])
+				}
+			}
+		}
+	})
+	if allocs != 0 {
+		t.Fatalf("expected 0, got %d", int(allocs))
 	}
 }
 
@@ -374,8 +415,8 @@ func TestReadNonExistentBlocksAfterWritingOneHundredBlocksReturnsZeroFilledData(
 	}
 
 	for _, index := range []int64{100, 150, 999} {
-		got, err := bf.Read(index)
-		if err != nil {
+		got := make([]byte, bf.Size())
+		if err := bf.Read(index, got); err != nil {
 			t.Fatalf("read non-existent block %d: %v", index, err)
 		}
 		for i, b := range got {
@@ -456,8 +497,8 @@ func TestBasicWriteRead(t *testing.T) {
 
 	got := ""
 	for i := 0; i < totalBlocks; i++ {
-		st, err := bf.Read(int64(i))
-		if err != nil {
+		st := make([]byte, bf.Size())
+		if err := bf.Read(int64(i), st); err != nil {
 			t.Fatalf("read block %d: %v", i, err)
 		}
 		got += string(st)
@@ -466,110 +507,4 @@ func TestBasicWriteRead(t *testing.T) {
 	if got != want {
 		t.Fatalf("expected file content %s, got %s", want, got)
 	}
-}
-
-// BenchmarkWriteTenThousandOneKilobyteBlocks measures sequential writes of
-// 10,000 blocks with 1 KiB payloads, including the final sync.
-func BenchmarkWriteTenThousandOneKilobyteBlocks(b *testing.B) {
-	const (
-		totalBlocks = 10_000
-		blockSize   = 1024
-	)
-
-	payloads := benchmarkBlockPayloads(totalBlocks, blockSize)
-	b.SetBytes(int64(totalBlocks * blockSize))
-	b.ReportAllocs()
-
-	for b.Loop() {
-		path := filepath.Join(b.TempDir(), "data.bin")
-		bf, err := blockfs.Open(path, blockfs.Options{BlockSize: blockSize})
-		if err != nil {
-			b.Fatalf("open: %v", err)
-		}
-
-		for i, payload := range payloads {
-			if err := bf.Write(int64(i), payload); err != nil {
-				_ = bf.Close()
-				b.Fatalf("write block %d: %v", i, err)
-			}
-		}
-		if err := bf.Sync(); err != nil {
-			_ = bf.Close()
-			b.Fatalf("sync: %v", err)
-		}
-		if err := bf.Close(); err != nil {
-			b.Fatalf("close: %v", err)
-		}
-	}
-}
-
-// BenchmarkReadTenThousandOneKilobyteBlocks measures sequential reads of
-// 10,000 pre-seeded 1 KiB blocks and validates the returned contents.
-func BenchmarkReadTenThousandOneKilobyteBlocks(b *testing.B) {
-	const (
-		totalBlocks = 10_000
-		blockSize   = 1024
-	)
-
-	payloads := benchmarkBlockPayloads(totalBlocks, blockSize)
-	b.SetBytes(int64(totalBlocks * blockSize))
-	b.ReportAllocs()
-
-	for b.Loop() {
-		path := filepath.Join(b.TempDir(), "data.bin")
-		writer, err := blockfs.Open(path, blockfs.Options{BlockSize: blockSize})
-		if err != nil {
-			b.Fatalf("open writer: %v", err)
-		}
-		for i, payload := range payloads {
-			if err := writer.Write(int64(i), payload); err != nil {
-				_ = writer.Close()
-				b.Fatalf("seed block %d: %v", i, err)
-			}
-		}
-		if err := writer.Sync(); err != nil {
-			_ = writer.Close()
-			b.Fatalf("seed sync: %v", err)
-		}
-		if err := writer.Close(); err != nil {
-			b.Fatalf("close writer: %v", err)
-		}
-
-		reader, err := blockfs.Open(path, blockfs.Options{BlockSize: blockSize})
-		if err != nil {
-			b.Fatalf("open reader: %v", err)
-		}
-
-		for i, want := range payloads {
-			got, err := reader.Read(int64(i))
-			if err != nil {
-				_ = reader.Close()
-				b.Fatalf("read block %d: %v", i, err)
-			}
-			if !bytes.Equal(got, want) {
-				_ = reader.Close()
-				b.Fatalf("block %d contents mismatch", i)
-			}
-		}
-		if err := reader.Close(); err != nil {
-			b.Fatalf("close reader: %v", err)
-		}
-	}
-}
-
-// benchmarkBlockPayloads builds deterministic benchmark payloads so the read
-// and write benchmarks operate on the same block contents every run.
-func benchmarkBlockPayloads(totalBlocks int, blockSize int64) [][]byte {
-	payloads := make([][]byte, totalBlocks)
-	for i := 0; i < totalBlocks; i++ {
-		block := make([]byte, blockSize)
-		prefix := []byte(fmt.Sprintf("block-%05d", i))
-		copy(block, prefix)
-		for j := len(prefix); j < len(block); j++ {
-			block[j] = byte((i + j) % 251)
-		}
-		payloads[i] = block
-	}
-
-	return payloads
 }

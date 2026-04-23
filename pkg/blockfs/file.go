@@ -53,16 +53,7 @@ func (f *blockFile) Size() int64 {
 	return f.blockSize
 }
 
-func (f *blockFile) Read(index int64) ([]byte, error) {
-	buf := make([]byte, f.blockSize)
-	if err := f.readBlockInto(index, buf); err != nil {
-		return nil, err
-	}
-
-	return buf, nil
-}
-
-func (f *blockFile) readBlockInto(index int64, dst []byte) error {
+func (f *blockFile) Read(index int64, dst []byte) error {
 	offset, err := blockOffset(index, f.blockSize)
 	if err != nil {
 		return err

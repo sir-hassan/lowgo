@@ -30,18 +30,21 @@ func (f *fakeFile) Size() int64 {
 	return f.blockSize
 }
 
-func (f *fakeFile) Read(index int64) ([]byte, error) {
+func (f *fakeFile) Read(index int64, dst []byte) error {
 	if f.closed {
-		return nil, blockfs.ErrClosed
+		return blockfs.ErrClosed
+	}
+	if int64(len(dst)) != f.blockSize {
+		return blockfs.ErrShortBlock
 	}
 	f.readCount++
 	if block, ok := f.readBlocks[index]; ok {
-		out := make([]byte, len(block))
-		copy(out, block)
-		return out, nil
+		copy(dst, block)
+		return nil
 	}
 
-	return make([]byte, f.blockSize), nil
+	clear(dst)
+	return nil
 }
 
 func (f *fakeFile) Write(index int64, data []byte) error {
@@ -80,14 +83,14 @@ func TestCacheServesRepeatedReadsFromMemory(t *testing.T) {
 
 	cached := blockfs.Cache(inner)
 
-	got1, err := cached.Read(3)
-	if err != nil {
+	got1 := make([]byte, inner.Size())
+	if err := cached.Read(3, got1); err != nil {
 		t.Fatalf("first read: %v", err)
 	}
 	got1[0] = 'z'
 
-	got2, err := cached.Read(3)
-	if err != nil {
+	got2 := make([]byte, inner.Size())
+	if err := cached.Read(3, got2); err != nil {
 		t.Fatalf("second read: %v", err)
 	}
 	if inner.readCount != 1 {
@@ -117,8 +120,8 @@ func TestCacheWritesStayInMemoryUntilSync(t *testing.T) {
 		t.Fatalf("expected no inner writes before sync, got %q", inner.writes[5])
 	}
 
-	got, err := cached.Read(5)
-	if err != nil {
+	got := make([]byte, inner.Size())
+	if err := cached.Read(5, got); err != nil {
 		t.Fatalf("read: %v", err)
 	}
 	if inner.readCount != 0 {
@@ -190,8 +193,8 @@ func TestOpenCachedPersistsThroughWrappedFile(t *testing.T) {
 		_ = reader.Close()
 	})
 
-	got, err := reader.Read(1)
-	if err != nil {
+	got := make([]byte, reader.Size())
+	if err := reader.Read(1, got); err != nil {
 		t.Fatalf("read persisted block: %v", err)
 	}
 	if !bytes.Equal(got, block) {
@@ -225,7 +228,7 @@ func TestCacheDelegatesSyncAndClose(t *testing.T) {
 		t.Fatalf("expected one close delegation, got %d", inner.closeCount)
 	}
 
-	if _, err := cached.Read(0); !errors.Is(err, blockfs.ErrClosed) {
+	if err := cached.Read(0, make([]byte, inner.Size())); !errors.Is(err, blockfs.ErrClosed) {
 		t.Fatalf("expected ErrClosed after close, got %v", err)
 	}
 }

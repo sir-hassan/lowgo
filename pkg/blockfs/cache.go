@@ -47,36 +47,41 @@ func (f *cachedFile) Size() int64 {
 	return f.file.Size()
 }
 
-func (f *cachedFile) Read(index int64) ([]byte, error) {
+func (f *cachedFile) Read(index int64, dst []byte) error {
 	if _, err := blockOffset(index, f.file.Size()); err != nil {
-		return nil, err
+		return err
+	}
+	if int64(len(dst)) != f.file.Size() {
+		return ErrShortBlock
 	}
 	if err := f.ensureOpen(); err != nil {
-		return nil, err
+		return err
 	}
 
 	f.cacheMu.RLock()
 	if block, ok := f.blocks[index]; ok {
 		f.cacheMu.RUnlock()
-		return cloneBlock(block), nil
+		copy(dst, block)
+		return nil
 	}
 	f.cacheMu.RUnlock()
 
-	block, err := f.file.Read(index)
-	if err != nil {
-		return nil, err
+	block := make([]byte, f.file.Size())
+	if err := f.file.Read(index, block); err != nil {
+		return err
 	}
-	block = cloneBlock(block)
 
 	f.cacheMu.Lock()
 	if cached, ok := f.blocks[index]; ok {
 		f.cacheMu.Unlock()
-		return cloneBlock(cached), nil
+		copy(dst, cached)
+		return nil
 	}
 	f.blocks[index] = block
 	f.cacheMu.Unlock()
 
-	return cloneBlock(block), nil
+	copy(dst, block)
+	return nil
 }
 
 func (f *cachedFile) Write(index int64, data []byte) error {

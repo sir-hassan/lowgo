@@ -58,8 +58,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	got, err := f.Read(0)
-	if err != nil {
+	got := make([]byte, f.Size())
+	if err := f.Read(0, got); err != nil {
 		log.Fatal(err)
 	}
 
