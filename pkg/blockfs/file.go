@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sync"
 	"sync/atomic"
 )
 
@@ -16,6 +17,8 @@ const (
 type blockFile struct {
 	file      *os.File
 	blockSize int64
+	nextIndex int64
+	metaMu    sync.Mutex
 	state     atomic.Int32
 }
 
@@ -30,9 +33,16 @@ func Open(path string, opts Options) (File, error) {
 		return nil, err
 	}
 
+	meta, err := openHeader(f, opts.BlockSize)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
 	bf := &blockFile{
 		file:      f,
-		blockSize: opts.BlockSize,
+		blockSize: meta.blockSize,
+		nextIndex: meta.nextIndex,
 	}
 	bf.state.Store(fileStateOpen)
 
@@ -101,6 +111,10 @@ func (f *blockFile) Write(index int64, data []byte) error {
 		}
 	}
 
+	if err := f.bumpNextIndex(index + 1); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -127,4 +141,25 @@ func (f *blockFile) readFile() (*os.File, error) {
 	}
 
 	return f.file, nil
+}
+
+func (f *blockFile) bumpNextIndex(next int64) error {
+	f.metaMu.Lock()
+	defer f.metaMu.Unlock()
+
+	if next <= f.nextIndex {
+		return nil
+	}
+
+	meta := header{
+		blockSize: f.blockSize,
+		nextIndex: next,
+	}
+	if err := writeHeader(f.file, meta); err != nil {
+		return err
+	}
+
+	f.nextIndex = next
+
+	return nil
 }

@@ -14,6 +14,11 @@ on its own, with explicit APIs and minimal framework code.
 
 Fixed-size block I/O over regular files.
 
+The on-disk format reserves a fixed 4 KiB header region for metadata. That
+header stores the configured block size and the next logical block index, and
+leaves the remaining bytes reserved for future format changes. User data begins
+immediately after that 4 KiB header region.
+
 What it provides:
 - Open a file as a block-addressable store.
 - Read and write blocks by index.

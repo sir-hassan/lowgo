@@ -2,6 +2,7 @@ package blockfs_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -14,12 +15,42 @@ import (
 	"github.com/sir-hassan/lowgo/pkg/blockfs"
 )
 
-// TestOpenRejectsInvalidBlockSize verifies that opening a block file without a
-// positive block size fails with ErrInvalidBlockSize.
-func TestOpenRejectsInvalidBlockSize(t *testing.T) {
+func writeTestHeader(t *testing.T, path string, blockSize int64, nextIndex int64) {
+	t.Helper()
+
+	buf := make([]byte, 4*1024)
+	copy(buf[:8], []byte{'B', 'L', 'K', 'F', 'S', 0x02, 0x00, 0x00})
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(blockSize))
+	binary.LittleEndian.PutUint64(buf[16:24], uint64(nextIndex))
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+}
+
+// TestOpenUsesDefaultBlockSize verifies that opening a block file without an
+// explicit block size uses the default 4 KiB block size.
+func TestOpenUsesDefaultBlockSize(t *testing.T) {
 	t.Parallel()
 
-	_, err := blockfs.Open(filepath.Join(t.TempDir(), "data.bin"), blockfs.Options{})
+	bf, err := blockfs.Open(filepath.Join(t.TempDir(), "data.bin"), blockfs.Options{})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = bf.Close()
+	})
+
+	if bf.Size() != 4*1024 {
+		t.Fatalf("expected default block size 4096, got %d", bf.Size())
+	}
+}
+
+// TestOpenRejectsNegativeBlockSize verifies that opening a block file with a
+// negative block size fails with ErrInvalidBlockSize.
+func TestOpenRejectsNegativeBlockSize(t *testing.T) {
+	t.Parallel()
+
+	_, err := blockfs.Open(filepath.Join(t.TempDir(), "data.bin"), blockfs.Options{BlockSize: -1})
 	if !errors.Is(err, blockfs.ErrInvalidBlockSize) {
 		t.Fatalf("expected ErrInvalidBlockSize, got %v", err)
 	}
@@ -111,8 +142,14 @@ func TestReadBlockZeroFillsRemainderOfPartialBlock(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "data.bin")
-	if err := os.WriteFile(path, []byte("hello"), 0o600); err != nil {
-		t.Fatalf("seed file: %v", err)
+	writeTestHeader(t, path, 8, 1)
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("open raw file: %v", err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+	if _, err := f.WriteAt([]byte("hello"), 4*1024); err != nil {
+		t.Fatalf("write partial block: %v", err)
 	}
 
 	bf, err := blockfs.Open(path, blockfs.Options{BlockSize: 8})
@@ -149,8 +186,8 @@ func TestReadRejectsInvalidBlockIndex(t *testing.T) {
 	})
 
 	for _, index := range []int64{-1, math.MaxInt64/4096 + 1} {
-		if _, err := bf.Read(index); !errors.Is(err, blockfs.ErrInvalidBlock) {
-			t.Fatalf("expected ErrInvalidBlock for index %d, got %v", index, err)
+		if _, err := bf.Read(index); !errors.Is(err, blockfs.ErrInvalidBlockIndex) {
+			t.Fatalf("expected ErrInvalidBlockIndex for index %d, got %v", index, err)
 		}
 	}
 }
@@ -171,8 +208,8 @@ func TestWriteRejectsInvalidBlockIndex(t *testing.T) {
 
 	block := make([]byte, bf.Size())
 	for _, index := range []int64{-1, math.MaxInt64/4096 + 1} {
-		if err := bf.Write(index, block); !errors.Is(err, blockfs.ErrInvalidBlock) {
-			t.Fatalf("expected ErrInvalidBlock for index %d, got %v", index, err)
+		if err := bf.Write(index, block); !errors.Is(err, blockfs.ErrInvalidBlockIndex) {
+			t.Fatalf("expected ErrInvalidBlockIndex for index %d, got %v", index, err)
 		}
 	}
 }
@@ -232,8 +269,8 @@ func TestSyncPersistsDataAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Size() != 2*writer.Size() {
-		t.Fatalf("expected file size %d, got %d", 2*writer.Size(), info.Size())
+	if info.Size() != 4*1024+2*writer.Size() {
+		t.Fatalf("expected file size %d, got %d", 4*1024+2*writer.Size(), info.Size())
 	}
 
 	reader, err := blockfs.Open(path, blockfs.Options{BlockSize: 4096})
@@ -292,8 +329,8 @@ func TestWriteAndReadBackOneHundredBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if info.Size() != int64(totalBlocks)*bf.Size() {
-		t.Fatalf("expected file size %d, got %d", int64(totalBlocks)*bf.Size(), info.Size())
+	if info.Size() != 4*1024+int64(totalBlocks)*bf.Size() {
+		t.Fatalf("expected file size %d, got %d", 4*1024+int64(totalBlocks)*bf.Size(), info.Size())
 	}
 
 	for i, want := range wantBlocks {
@@ -369,6 +406,24 @@ func TestOpenUsesDefaultPermissionsWhenUnset(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o600 {
 		t.Fatalf("expected default permissions 0600, got %04o", got)
+	}
+}
+
+func TestOpenRejectsMismatchedBlockSizeFromHeader(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "data.bin")
+	writer, err := blockfs.Open(path, blockfs.Options{BlockSize: 4096})
+	if err != nil {
+		t.Fatalf("open writer: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	_, err = blockfs.Open(path, blockfs.Options{BlockSize: 1024})
+	if !errors.Is(err, blockfs.ErrBlockSizeMismatch) {
+		t.Fatalf("expected ErrBlockSizeMismatch, got %v", err)
 	}
 }
 

@@ -7,10 +7,12 @@ import (
 )
 
 var (
-	ErrClosed           = errors.New("blockfs: file is closed")
-	ErrInvalidBlockSize = errors.New("blockfs: invalid block size")
-	ErrInvalidBlock     = errors.New("blockfs: invalid block index")
-	ErrShortBlock       = errors.New("blockfs: buffer size must match block size")
+	ErrClosed            = errors.New("blockfs: file is closed")
+	ErrInvalidBlockSize  = errors.New("blockfs: invalid block size")
+	ErrInvalidBlockIndex = errors.New("blockfs: invalid block index")
+	ErrShortBlock        = errors.New("blockfs: buffer size must match block size")
+	ErrCorruptHeader     = errors.New("blockfs: corrupt header")
+	ErrBlockSizeMismatch = errors.New("blockfs: block size does not match file header")
 )
 
 type File interface {
@@ -27,8 +29,11 @@ type Options struct {
 }
 
 func (o Options) normalized() (Options, error) {
-	if o.BlockSize <= 0 {
+	if o.BlockSize < 0 {
 		return Options{}, ErrInvalidBlockSize
+	}
+	if o.BlockSize == 0 {
+		o.BlockSize = 4 * 1024
 	}
 	if o.Perm == 0 {
 		o.Perm = 0o600
@@ -39,11 +44,11 @@ func (o Options) normalized() (Options, error) {
 
 func blockOffset(index int64, blockSize int64) (int64, error) {
 	if index < 0 {
-		return 0, ErrInvalidBlock
+		return 0, ErrInvalidBlockIndex
 	}
-	if index > (1<<63-1)/blockSize {
-		return 0, fmt.Errorf("blockfs: block offset overflow: %w", ErrInvalidBlock)
+	if index > (1<<63-1-headerRegionSize)/blockSize {
+		return 0, fmt.Errorf("blockfs: block offset overflow: %w", ErrInvalidBlockIndex)
 	}
 
-	return index * blockSize, nil
+	return headerRegionSize + index*blockSize, nil
 }

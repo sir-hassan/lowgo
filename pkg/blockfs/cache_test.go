@@ -160,7 +160,7 @@ func TestOpenCachedPersistsThroughWrappedFile(t *testing.T) {
 	t.Parallel()
 
 	path := t.TempDir() + "/data.bin"
-	writer, err := blockfs.OpenCached(path, blockfs.Options{BlockSize: 8})
+	writer, err := blockfs.OpenCached(path, blockfs.Options{BlockSize: 32})
 	if err != nil {
 		t.Fatalf("open cached: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestOpenCachedPersistsThroughWrappedFile(t *testing.T) {
 		}
 	}
 
-	block := []byte("block-01")
+	block := bytes.Repeat([]byte("b"), 32)
 	if err := writer.Write(1, block); err != nil {
 		t.Fatalf("write block: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestOpenCachedPersistsThroughWrappedFile(t *testing.T) {
 		t.Fatalf("close writer: %v", err)
 	}
 
-	reader, err := blockfs.Open(path, blockfs.Options{BlockSize: 8})
+	reader, err := blockfs.Open(path, blockfs.Options{BlockSize: 32})
 	if err != nil {
 		t.Fatalf("open reader: %v", err)
 	}
