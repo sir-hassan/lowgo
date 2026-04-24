@@ -3,6 +3,7 @@ package kv_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -228,5 +229,121 @@ func TestRejectsInvalidType(t *testing.T) {
 	})
 	if !errors.Is(err, kv.ErrInvalidType) {
 		t.Fatalf("expected ErrInvalidType, got %v", err)
+	}
+}
+
+func TestBPlusTreeRoundTripAcrossSplits(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "tree.kv")
+	store, err := kv.Open(path, kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeBPlusTree,
+	})
+	if err != nil {
+		t.Fatalf("open b+ tree: %v", err)
+	}
+
+	want := make(map[string][]byte)
+	for i := 0; i < 48; i++ {
+		key := []byte(fmt.Sprintf("key-%03d", i))
+		value := bytes.Repeat([]byte{byte(i)}, 96+i%17)
+		want[string(key)] = append([]byte(nil), value...)
+		if err := store.Set(key, value); err != nil {
+			_ = store.Close()
+			t.Fatalf("set %q: %v", key, err)
+		}
+	}
+	if err := store.Sync(); err != nil {
+		_ = store.Close()
+		t.Fatalf("sync: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+
+	reader, err := kv.Open(path, kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeBPlusTree,
+	})
+	if err != nil {
+		t.Fatalf("reopen b+ tree: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = reader.Close()
+	})
+
+	for key, value := range want {
+		got, err := reader.Get([]byte(key))
+		if err != nil {
+			t.Fatalf("get %q: %v", key, err)
+		}
+		if !bytes.Equal(got, value) {
+			t.Fatalf("value mismatch for %q", key)
+		}
+	}
+}
+
+func TestBPlusTreeDeleteAndUpdate(t *testing.T) {
+	t.Parallel()
+
+	store, err := kv.Open(filepath.Join(t.TempDir(), "tree.kv"), kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeBPlusTree,
+	})
+	if err != nil {
+		t.Fatalf("open b+ tree: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	key := []byte("alpha")
+	if err := store.Set(key, []byte("v1")); err != nil {
+		t.Fatalf("set v1: %v", err)
+	}
+	if err := store.Set(key, []byte("v2")); err != nil {
+		t.Fatalf("set v2: %v", err)
+	}
+	got, err := store.Get(key)
+	if err != nil {
+		t.Fatalf("get updated value: %v", err)
+	}
+	if string(got) != "v2" {
+		t.Fatalf("expected updated value, got %q", got)
+	}
+
+	if err := store.Delete(key); err != nil {
+		t.Fatalf("delete key: %v", err)
+	}
+	if _, err := store.Get(key); !errors.Is(err, kv.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestBPlusTreeRejectsCorruptSuperblock(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "tree.kv")
+	file, err := blockfs.Open(path, blockfs.Options{BlockSize: 128})
+	if err != nil {
+		t.Fatalf("open raw block file: %v", err)
+	}
+	block := make([]byte, file.Size())
+	copy(block, []byte("not-a-bplus-superblock"))
+	if err := file.Write(0, block); err != nil {
+		_ = file.Close()
+		t.Fatalf("write corrupt block: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close raw block file: %v", err)
+	}
+
+	_, err = kv.Open(path, kv.Options{
+		BlockSize: 128,
+		Type:      kv.TypeBPlusTree,
+	})
+	if !errors.Is(err, kv.ErrCorrupt) {
+		t.Fatalf("expected ErrCorrupt, got %v", err)
 	}
 }

@@ -115,11 +115,13 @@ What it provides:
 - A package-level `Store` interface for persistent KV backends.
 - `Open(path, opts)` as a type-dispatching constructor.
 - `OpenLinkedList(path, opts)` as the linked-list-backed implementation.
+- `OpenBPlusTree(path, opts)` as the B+ tree-backed implementation.
 - Variable-length values encoded across chained payload blocks.
 
 Main APIs:
 - `kv.Open(path, opts)`
 - `kv.OpenLinkedList(path, opts)`
+- `kv.OpenBPlusTree(path, opts)`
 - `kv.Store`
 
 Example:
@@ -137,7 +139,7 @@ func main() {
 	store, err := kv.Open("data.kv", kv.Options{
 		BlockSize:   4 * 1024,
 		BucketCount: 256,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeBPlusTree,
 	})
 	if err != nil {
 		log.Fatal(err)
