@@ -178,7 +178,7 @@ func decodeBPlusNode(src []byte) (bplusNode, error) {
 		node.leafEntries = make([]bplusLeafEntry, count)
 
 		offset := bplusNodeHeaderSize
-		for i := 0; i < count; i++ {
+		for i := range count {
 			keyRef, err := decodeBlockRef(binary.LittleEndian.Uint64(src[offset+8 : offset+16]))
 			if err != nil {
 				return bplusNode{}, err
@@ -221,7 +221,7 @@ func decodeBPlusNode(src []byte) (bplusNode, error) {
 		node.internalEntries = make([]bplusInternalEntry, count)
 
 		offset := bplusNodeHeaderSize
-		for i := 0; i < count; i++ {
+		for i := range count {
 			keyRef, err := decodeBlockRef(binary.LittleEndian.Uint64(src[offset+8 : offset+16]))
 			if err != nil {
 				return bplusNode{}, err

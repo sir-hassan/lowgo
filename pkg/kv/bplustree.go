@@ -130,6 +130,7 @@ func (s *BPlusTreeStore) Delete(key []byte) error {
 	defer s.mu.Unlock()
 
 	_, err := s.deleteLocked(s.super.rootBlock, key)
+
 	return err
 }
 
@@ -192,6 +193,7 @@ func (s *BPlusTreeStore) open() error {
 	s.super = meta
 
 	_, err = s.readNodeLocked(s.super.rootBlock)
+
 	return err
 }
 
@@ -266,6 +268,7 @@ func (s *BPlusTreeStore) insertIntoLeafLocked(block int64, node bplusNode, key [
 	if found {
 		node.leafEntries[index].valueLen = uint64(len(value))
 		node.leafEntries[index].valueRef = valueRef
+
 		return nil, s.writeNodeLocked(block, node)
 	}
 
@@ -359,6 +362,7 @@ func (s *BPlusTreeStore) deleteLocked(block int64, key []byte) (bool, error) {
 			return false, err
 		}
 		node.leafEntries = append(node.leafEntries[:index], node.leafEntries[index+1:]...)
+
 		return true, s.writeNodeLocked(block, node)
 	}
 
@@ -422,7 +426,7 @@ func (s *BPlusTreeStore) storeBlobLocked(data []byte) (int64, error) {
 	}
 
 	offset := 0
-	for i := int64(0); i < chunkCount; i++ {
+	for i := range chunkCount {
 		block := make([]byte, s.blockBytes)
 		used := minInt(len(data)-offset, s.chunkPayloadCapacity)
 		next := int64(-1)
@@ -450,6 +454,7 @@ func (s *BPlusTreeStore) loadBlobLocked(ref int64, length uint64) ([]byte, error
 		if ref >= 0 {
 			return nil, ErrCorrupt
 		}
+
 		return []byte{}, nil
 	}
 	if ref < 0 {

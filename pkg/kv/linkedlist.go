@@ -155,7 +155,7 @@ func (s *LinkedListStore) open(configuredBucketCount int64) error {
 			nextBlock:         1 + ceilDiv(bucketCount*8, s.blockSize),
 		}
 		if err := validateLayout(meta, s.blockSize); err != nil {
-			return fmt.Errorf("%w: %v", ErrCorrupt, err)
+			return fmt.Errorf("%w: %w", ErrCorrupt, err)
 		}
 		s.super = meta
 
@@ -167,7 +167,7 @@ func (s *LinkedListStore) open(configuredBucketCount int64) error {
 		return err
 	}
 	if err := validateLayout(meta, s.blockSize); err != nil {
-		return fmt.Errorf("%w: %v", ErrCorrupt, err)
+		return fmt.Errorf("%w: %w", ErrCorrupt, err)
 	}
 	if configuredBucketCount > 0 && configuredBucketCount != meta.bucketCount {
 		return ErrBucketCountMismatch
@@ -296,7 +296,7 @@ func (s *LinkedListStore) writePayloadChainLocked(start int64, chunkCount int64,
 	valueOffset := 0
 	remaining := len(key) + len(value)
 
-	for i := int64(0); i < chunkCount; i++ {
+	for i := range chunkCount {
 		block := make([]byte, s.blockBytes)
 		used := minInt(remaining, s.chunkPayloadCapacity)
 
