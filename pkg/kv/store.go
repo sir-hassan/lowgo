@@ -28,8 +28,8 @@ type Store interface {
 type Type string
 
 const (
-	TypeLinkedList Type = "linked_list"
-	TypeBPlusTree  Type = "b_plus_tree"
+	TypeLL  Type = "linked_list"
+	TypeBPT Type = "b_plus_tree"
 )
 
 type Options struct {
@@ -46,10 +46,10 @@ func Open(path string, opts Options) (Store, error) {
 	}
 
 	switch opts.Type {
-	case TypeLinkedList:
-		return OpenLinkedList(path, opts)
-	case TypeBPlusTree:
-		return OpenBPlusTree(path, opts)
+	case TypeLL:
+		return OpenLL(path, opts)
+	case TypeBPT:
+		return OpenBPT(path, opts)
 	default:
 		return nil, ErrInvalidType
 	}
@@ -69,10 +69,10 @@ func (o Options) normalized() (Options, error) {
 		return Options{}, ErrInvalidBucketCount
 	}
 	if o.Type == "" {
-		o.Type = TypeLinkedList
+		o.Type = TypeLL
 	}
 	switch o.Type {
-	case TypeLinkedList, TypeBPlusTree:
+	case TypeLL, TypeBPT:
 	default:
 		return Options{}, ErrInvalidType
 	}

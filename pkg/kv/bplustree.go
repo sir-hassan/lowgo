@@ -25,7 +25,7 @@ type bplusSplit struct {
 	rightBlock int64
 }
 
-func OpenBPlusTree(path string, opts Options) (*BPlusTreeStore, error) {
+func OpenBPT(path string, opts Options) (*BPlusTreeStore, error) {
 	opts, err := opts.normalized()
 	if err != nil {
 		return nil, err

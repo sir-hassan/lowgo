@@ -18,7 +18,7 @@ func TestRoundTripVariableValueAcrossBlocks(t *testing.T) {
 	store, err := kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 8,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeLL,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -41,7 +41,7 @@ func TestRoundTripVariableValueAcrossBlocks(t *testing.T) {
 
 	reader, err := kv.Open(path, kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeLinkedList,
+		Type:      kv.TypeLL,
 	})
 	if err != nil {
 		t.Fatalf("reopen kv: %v", err)
@@ -62,7 +62,7 @@ func TestRoundTripVariableValueAcrossBlocks(t *testing.T) {
 func TestLinkedListCollisionsDeleteAndReinsert(t *testing.T) {
 	t.Parallel()
 
-	store, err := kv.OpenLinkedList(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
+	store, err := kv.OpenLL(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
 		BlockSize:   128,
 		BucketCount: 1,
 	})
@@ -119,7 +119,7 @@ func TestHasAndDeleteMissingKey(t *testing.T) {
 	store, err := kv.Open(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeLL,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -147,7 +147,7 @@ func TestRejectsEmptyKey(t *testing.T) {
 	store, err := kv.Open(filepath.Join(t.TempDir(), "data.kv"), kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeLL,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -174,7 +174,7 @@ func TestRejectsBucketCountMismatch(t *testing.T) {
 	store, err := kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 4,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeLL,
 	})
 	if err != nil {
 		t.Fatalf("open kv: %v", err)
@@ -186,7 +186,7 @@ func TestRejectsBucketCountMismatch(t *testing.T) {
 	_, err = kv.Open(path, kv.Options{
 		BlockSize:   128,
 		BucketCount: 8,
-		Type:        kv.TypeLinkedList,
+		Type:        kv.TypeLL,
 	})
 	if !errors.Is(err, kv.ErrBucketCountMismatch) {
 		t.Fatalf("expected ErrBucketCountMismatch, got %v", err)
@@ -213,7 +213,7 @@ func TestRejectsCorruptSuperblock(t *testing.T) {
 
 	_, err = kv.Open(path, kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeLinkedList,
+		Type:      kv.TypeLL,
 	})
 	if !errors.Is(err, kv.ErrCorrupt) {
 		t.Fatalf("expected ErrCorrupt, got %v", err)
@@ -238,7 +238,7 @@ func TestBPlusTreeRoundTripAcrossSplits(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tree.kv")
 	store, err := kv.Open(path, kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeBPlusTree,
+		Type:      kv.TypeBPT,
 	})
 	if err != nil {
 		t.Fatalf("open b+ tree: %v", err)
@@ -264,7 +264,7 @@ func TestBPlusTreeRoundTripAcrossSplits(t *testing.T) {
 
 	reader, err := kv.Open(path, kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeBPlusTree,
+		Type:      kv.TypeBPT,
 	})
 	if err != nil {
 		t.Fatalf("reopen b+ tree: %v", err)
@@ -289,7 +289,7 @@ func TestBPlusTreeDeleteAndUpdate(t *testing.T) {
 
 	store, err := kv.Open(filepath.Join(t.TempDir(), "tree.kv"), kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeBPlusTree,
+		Type:      kv.TypeBPT,
 	})
 	if err != nil {
 		t.Fatalf("open b+ tree: %v", err)
@@ -341,7 +341,7 @@ func TestBPlusTreeRejectsCorruptSuperblock(t *testing.T) {
 
 	_, err = kv.Open(path, kv.Options{
 		BlockSize: 128,
-		Type:      kv.TypeBPlusTree,
+		Type:      kv.TypeBPT,
 	})
 	if !errors.Is(err, kv.ErrCorrupt) {
 		t.Fatalf("expected ErrCorrupt, got %v", err)

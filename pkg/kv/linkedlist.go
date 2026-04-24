@@ -23,7 +23,7 @@ type LinkedListStore struct {
 	super superblock
 }
 
-func OpenLinkedList(path string, opts Options) (*LinkedListStore, error) {
+func OpenLL(path string, opts Options) (*LinkedListStore, error) {
 	opts, err := opts.normalized()
 	if err != nil {
 		return nil, err

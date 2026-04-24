@@ -10,7 +10,7 @@ import (
 )
 
 func BenchmarkStore(b *testing.B) {
-	for _, storeType := range []kv.Type{kv.TypeLinkedList, kv.TypeBPlusTree} {
+	for _, storeType := range []kv.Type{kv.TypeLL, kv.TypeBPT} {
 		for _, valueSize := range []int{64, 4096} {
 			b.Run(fmt.Sprintf("%s/set/value_%d", storeType, valueSize), func(b *testing.B) {
 				const totalKeys = 2_000
